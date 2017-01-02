@@ -19,6 +19,8 @@ struct data {
    struct timer_list timer;
    u32 test_count;
    unsigned long avg_nsecs, missed_irqs;
+   unsigned long last_nsecs;
+   unsigned int period;
 };
 
 /* Aux functions declaration*/
@@ -33,8 +35,8 @@ int latency_init(void);
 void latency_exit(void);
 static int latencty_open(struct inode *inode, struct file *fp);
 static int latency_close(struct inode *inode, struct file *fp);
-static int latency_ioctl(struct file *fp, int period);
-static int latency_read(struct file *fp);
+static int latency_ioctl(struct file *fp, u16 irq_pin, u16 gpio_pin, int period);
+static int latency_read(struct file *fp, int type);
 
 /* Variables */
 struct cdev *lcdev;
@@ -76,9 +78,6 @@ static int setup_pinmux(void) {
       iounmap(addr);
    }
 
-   test_data.irq_pin = 48;
-   test_data.gpio_pin = 60;
-
    return 0;
 }
 
@@ -86,82 +85,82 @@ int configure_gpio_irq(void) {
 
    ret = setup_pinmux();
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " : failed to apply pinmux settings.\n");
+      printk(KERN_ALERT DRV_NAME " irq_latency : failed to apply pinmux settings.\n");
       goto err_return;
    }
 	
-   ret = gpio_request_one(test_data.gpio_pin, GPIOF_OUT_INIT_HIGH,
+   ret = gpio_request_one(data.gpio_pin, GPIOF_OUT_INIT_HIGH,
       DRV_NAME " gpio");
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " : failed to request GPIO pin %d.\n",
-         test_data.gpio_pin);
+      printk(KERN_ALERT DRV_NAME " irq_latency : failed to request GPIO pin %d.\n",
+         data.gpio_pin);
       goto err_return;
    }
 	
-   ret = gpio_request_one(test_data.irq_pin, GPIOF_IN, DRV_NAME " irq");
+   ret = gpio_request_one(data.irq_pin, GPIOF_IN, DRV_NAME " irq");
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " : failed to request IRQ pin %d.\n",
-         test_data.irq_pin);
+      printk(KERN_ALERT DRV_NAME " irq_latency : failed to request IRQ pin %d.\n",
+         data.irq_pin);
       goto err_free_gpio_return;
    }
 	
-   ret = gpio_to_irq(test_data.irq_pin);
+   ret = gpio_to_irq(data.irq_pin);
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " : failed to get IRQ for pin %d.\n",
-         test_data.irq_pin);
+      printk(KERN_ALERT DRV_NAME " irq_latency : failed to get IRQ for pin %d.\n",
+         data.irq_pin);
       goto err_free_irq_return;
    } else {
-      test_data.irq = (u16)err;
+      data.irq = (u16)ret;
       ret = 0;
    }
 	
    ret = request_any_context_irq(
-      test_data.irq,
+      data.irq,
       test_irq_latency_interrupt_handler,
       IRQF_TRIGGER_FALLING | IRQF_DISABLED,
       DRV_NAME,
-      (void*)&test_data
+      (void*)&data
    );
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " : failed to enable IRQ %d for pin %d.\n",
-         test_data.irq, test_data.irq_pin);
+      printk(KERN_ALERT DRV_NAME " irq_latency : failed to enable IRQ %d for pin %d.\n",
+         data.irq, data.irq_pin);
       goto err_free_irq_return;
    } else
-      test_data.irq_enabled = 1;
+      data.irq_enabled = 1;
 	
-   init_timer(&test_data.timer);
-   test_data.timer.expires = jiffies + TEST_INTERVAL;
-   test_data.timer.data = (unsigned long)&test_data;
-   test_data.timer.function = test_irq_latency_timer_handler;
-   add_timer(&test_data.timer);
+   init_timer(&data.timer);
+   data.timer.expires = jiffies + TEST_INTERVAL;
+   data.timer.data = (unsigned long)&data;
+   data.timer.function = test_irq_latency_timer_handler;
+   add_timer(&data.timer);
 
    printk(KERN_INFO DRV_NAME
-      " : beginning GPIO IRQ latency test (%u passes in %d seconds).\n",
+      " irq_latency : beginning GPIO IRQ latency test (%u passes in %d seconds).\n",
       NUM_TESTS, (NUM_TESTS * TEST_INTERVAL) / HZ);
 	
    return 0;
 
 err_free_irq_return:
-   gpio_free(test_data.irq_pin);
+   gpio_free(data.irq_pin);
 err_free_gpio_return:
-   gpio_free(test_data.gpio_pin);
+   gpio_free(data.gpio_pin);
 err_return:
-   return err;
+   return ret;
 }
 
 void release_gpio_irq(void) {
-   del_timer_sync(&test_data.timer);
+   del_timer_sync(&data.timer);
 	
-   free_irq(test_data.irq, (void*)&test_data);
+   free_irq(data.irq, (void*)&data);
 	
-   gpio_free(test_data.irq_pin);
-   gpio_free(test_data.gpio_pin);
+   gpio_free(data.irq_pin);
+   gpio_free(data.gpio_pin);
 	
-   printk(KERN_INFO DRV_NAME " : unloaded IRQ latency test.\n");
+   printk(KERN_INFO DRV_NAME " irq_latency : unloaded IRQ latency test.\n");
 }
 
 static irqreturn_t irq_latency_interrupt_handler(int irq, void* dev_id) {
-   struct irq_latency_test* data = (struct irq_latency_test*)dev_id;
+   struct data* data = (struct data*)dev_id;
    
    getnstimeofday(&data->irq_time);
    data->irq_fired = 1;
@@ -173,22 +172,21 @@ static irqreturn_t irq_latency_interrupt_handler(int irq, void* dev_id) {
 
 
 static void irq_latency_timer_handler(unsigned long ptr) {
-   struct irq_latency_test* data = (struct irq_latency_test*)ptr;
+   struct data* data = (struct data*)ptr;
    u8 test_ok = 0;
    
    if (data->irq_fired) {
       struct timespec delta = timespec_sub(data->irq_time, data->gpio_time);
-
          if (delta.tv_sec > 0) {
             printk(KERN_INFO DRV_NAME
-               " : GPIO IRQ triggered after > 1 sec, something is fishy.\n");
+               " irq_latency : GPIO IRQ triggered after > 1 sec, something is fishy.\n");
             data->missed_irqs++;
          } else {
             data->avg_nsecs = data->avg_nsecs ?
                (unsigned long)(((unsigned long long)delta.tv_nsec +
                   (unsigned long long)data->avg_nsecs) >> 1) :
                   delta.tv_nsec;
-	   	   
+            data->last_nsecs = (unsigned long) delta.tv_nsec;
             test_ok = 1;
          }
 
@@ -199,13 +197,13 @@ static void irq_latency_timer_handler(unsigned long ptr) {
 
    if (test_ok && ++data->test_count >= NUM_TESTS) {
       printk(KERN_INFO DRV_NAME
-         " : finished %u passes. average GPIO IRQ latency is %lu nsecs.\n",
+         " irq_latency : finished %u passes. average GPIO IRQ latency is %lu nsecs.\n",
             NUM_TESTS, data->avg_nsecs);
 	   		
       goto stopTesting;
    } else {
       if (data->missed_irqs > MISSED_IRQ_MAX) {
-         printk(KERN_INFO DRV_NAME " : too many interrupts missed. "
+         printk(KERN_INFO DRV_NAME " irq_latency : too many interrupts missed. "
             "check your jumper cable and reload this module!\n");
 
       goto stopTesting;
@@ -220,9 +218,9 @@ static void irq_latency_timer_handler(unsigned long ptr) {
    return;
 	
 stopTesting:
-   if (test_data.irq_enabled) {
-      disable_irq(test_data.irq);
-      test_data.irq_enabled = 0;
+   if (data.irq_enabled) {
+      disable_irq(data.irq);
+      data.irq_enabled = 0;
    }
 }
 
@@ -267,6 +265,31 @@ void latency_exit(void) {
     unregister_chrdev_region(dev_num,1);
     printk(KERN_INFO "irq_latency : unregistered the device numbers\n");
     printk(KERN_ALERT " irq_latency : character driver is exiting\n");
+}
+
+static int latencty_open(struct inode *inode, struct file *fp) {
+    configure_gpio_irq();
+}
+static int latency_close(struct inode *inode, struct file *fp) {
+    release_gpio_irq();
+}
+
+static int latency_ioctl(struct file *fp, u16 irq_pin, u16 gpio_pin, int period){
+    data.irq_pin = irq_pin;
+    data.gpio_pin = gpio_pin;
+    data.period = (HZ/period);
+}
+
+static int latency_read(struct file *fp, int type) {
+    switch (type)
+    {
+        case LAST:
+            return return data.avg_nsecs;
+        case AVG:
+            return data.last_nsecs;
+        default:
+            return -1;
+    }
 }
 
 MODULE_AUTHOR("ALBERTO ALVAREZ (alberto.alvarez.aldea@gmail.com)");
