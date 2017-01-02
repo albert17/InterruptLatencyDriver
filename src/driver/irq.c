@@ -32,7 +32,7 @@ static int setup_pinmux(void) {
    return 0;
 }
 
-int configure_gpio_irq(void) {
+int configure_gpio_irq(struct latency_dev *latency_devp) {
 
    ret = setup_pinmux();
    if (ret < 0) {
@@ -40,33 +40,33 @@ int configure_gpio_irq(void) {
       goto err_return;
    }
 	
-   ret = gpio_request_one(data.gpio_pin, GPIOF_OUT_INIT_HIGH,
+   ret = gpio_request_one(latency_devp->gpio_pin, GPIOF_OUT_INIT_HIGH,
       DRV_NAME " gpio");
    if (ret < 0) {
       printk(KERN_ALERT DRV_NAME " irq_latency : failed to request GPIO pin %d.\n",
-         data.gpio_pin);
+         latency_devp->gpio_pin);
       goto err_return;
    }
 	
-   ret = gpio_request_one(data.irq_pin, GPIOF_IN, DRV_NAME " irq");
+   ret = gpio_request_one(latency_devp->irq_pin, GPIOF_IN, DRV_NAME " irq");
    if (ret < 0) {
       printk(KERN_ALERT DRV_NAME " irq_latency : failed to request IRQ pin %d.\n",
-         data.irq_pin);
+         latency_devp->irq_pin);
       goto err_free_gpio_return;
    }
 	
-   ret = gpio_to_irq(data.irq_pin);
+   ret = gpio_to_irq(latency_devp->irq_pin);
    if (ret < 0) {
       printk(KERN_ALERT DRV_NAME " irq_latency : failed to get IRQ for pin %d.\n",
-         data.irq_pin);
+         latency_devp->irq_pin);
       goto err_free_irq_return;
    } else {
-      data.irq = (u16)ret;
+      latency_devp->irq = (u16)ret;
       ret = 0;
    }
 	
    ret = request_any_context_irq(
-      data.irq,
+      latency_devp->irq,
       test_irq_latency_interrupt_handler,
       IRQF_TRIGGER_FALLING | IRQF_DISABLED,
       DRV_NAME,
@@ -74,16 +74,16 @@ int configure_gpio_irq(void) {
    );
    if (ret < 0) {
       printk(KERN_ALERT DRV_NAME " irq_latency : failed to enable IRQ %d for pin %d.\n",
-         data.irq, data.irq_pin);
+         latency_devp->irq, latency_devp->irq_pin);
       goto err_free_irq_return;
    } else
-      data.irq_enabled = 1;
+      latency_devp->irq_enabled = 1;
 	
-   init_timer(&data.timer);
-   data.timer.expires = jiffies + TEST_INTERVAL;
-   data.timer.data = (unsigned long)&data;
-   data.timer.function = test_irq_latency_timer_handler;
-   add_timer(&data.timer);
+   init_timer(&latency_devp->timer);
+   latency_devp->timer.expires = jiffies + TEST_INTERVAL;
+   latency_devp->timer.data = (unsigned long)&data;
+   latency_devp->timer.function = test_irq_latency_timer_handler;
+   add_timer(&latency_devp->timer);
 
    printk(KERN_INFO DRV_NAME
       " irq_latency : beginning GPIO IRQ latency test (%u passes in %d seconds).\n",
@@ -92,20 +92,20 @@ int configure_gpio_irq(void) {
    return 0;
 
 err_free_irq_return:
-   gpio_free(data.irq_pin);
+   gpio_free(latency_devp->irq_pin);
 err_free_gpio_return:
-   gpio_free(data.gpio_pin);
+   gpio_free(latency_devp->gpio_pin);
 err_return:
    return ret;
 }
 
-void release_gpio_irq(void) {
-   del_timer_sync(&data.timer);
+void release_gpio_irq(struct latency_dev *latency_devp) {
+   del_timer_sync(&latency_devp->timer);
 	
-   free_irq(data.irq, (void*)&data);
+   free_irq(latency_devp->irq, (void*)&data);
 	
-   gpio_free(data.irq_pin);
-   gpio_free(data.gpio_pin);
+   gpio_free(latency_devp->irq_pin);
+   gpio_free(latency_devp->gpio_pin);
 	
    printk(KERN_INFO DRV_NAME " irq_latency : unloaded IRQ latency test.\n");
 }
@@ -169,8 +169,8 @@ static void irq_latency_timer_handler(unsigned long ptr) {
    return;
 	
 stopTesting:
-   if (data.irq_enabled) {
-      disable_irq(data.irq);
-      data.irq_enabled = 0;
+   if (latency_devp->irq_enabled) {
+      disable_irq(latency_devp->irq);
+      latency_devp->irq_enabled = 0;
    }
 }
