@@ -29,10 +29,9 @@ dev_t dev_num;
 struct file_operations fops = {
     .owner = THIS_MODULE,
     .open = latency_open,
-    .write = latency_write,
+    .ioctl = latency_write,
     .read = latency_read,
-    .release = latency_close,
-    .llseek = latency_lseek
+    .close = latency_close,
 };
 
 #endif /* IRQ_LATENCY_H */
