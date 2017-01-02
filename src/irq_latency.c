@@ -20,7 +20,7 @@ int latency_init(void) {
     lcdev->ops = &fops;
     lcdev->owner = THIS_MODULE;
 
-    // Add cdev structure to the kernel
+    // Add cdev structure to the system
     ret = cdev_add(lcdev,dev_num,1);
     if(ret < 0) {
         printk(KERN_ALERT "irq_latency : device adding to the kerknel failed\n");
@@ -32,7 +32,16 @@ int latency_init(void) {
     return 0;
 }
 
-void latency_exit(void);
+void latency_exit(void) {
+    // Removes cdev structure
+    cdev_del(lcdev);
+    printk(KERN_INFO " irq_latency : removed the mcdev from kernel\n");
+
+    // Unregister device
+    unregister_chrdev_region(dev_num,1);
+    printk(KERN_INFO "irq_latency : unregistered the device numbers\n");
+    printk(KERN_ALERT " irq_latency : character driver is exiting\n");
+}
 
 static int latencty_open(struct inode *inode, struct file *fp);
 
