@@ -9,6 +9,8 @@
 /* Defines */
 #define DEVICENAME "latency"
 #define AM33XX_CONTROL_BASE 0x44e10000
+#define LAST 0
+#define AVG 1
 
 /* Structures */
 struct data {
