@@ -8,10 +8,10 @@
 
 #include "irq.h"
 
-static u32 pins8_offset [47] = {};
-static u32 pins8_val [47] = {};
-static u32 pins9_offset [47] = {};
-static u32 pins9_val [47] = {};
+static u32 pins8_offset[47] = {0,0,0x818,0x81C,0x808,0x80C,0,0,0,0,0x834,0x830,0,0x828,0x83C,0x838,0x82C,0x88C,0,0x884,0x880,0x814,0x810,0x804,0x800,0x87C,0x8E0,0x8E8,0x8E4,0x8EC,0,0,0,0,0,0,0,0,0x8B8,0x8BC,0x8B4,0x8B0,0x8A8,0x8AC,0x8A0,0x8A4};
+static u32 pins8_val[47] = {0,0,38,39,34,35,0,0,0,0,45,44,0,26,47,46,27,65,0,63,62,37,36,33,32,61,86,88,87,89,0,0,0,0,0,0,0,0,76,77,74,75,72,73,70,71};
+static u32 pins9_offset[47] = {0,0,0,0,0,0,0,0,0,0,0,0x878,0,0,0x840,0,0,0,0,0,0,0,0x844,0,0x9AC,0,0x9A4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x964,0,0,0,0};
+static u32 pins9_val[47] = {0,0,0,0,0,0,0,0,0,0,0,60,0,0,48,0,0,0,0,0,0,0,49,0,117,0,115,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0};
 
 static int setup_pinmux(struct latency_dev *latency_devp) { 
    u16 irq_pin = latencty_devp->irq_pin;
@@ -154,59 +154,59 @@ void release_gpio_irq(struct latency_dev *latency_devp) {
 }
 
 static irqreturn_t irq_latency_interrupt_handler(int irq, void* dev_id) {
-   struct data* data = (struct data*)dev_id;
+   struct latency_dev* latency_devp = (struct latency_dev*)dev_id;
    
-   getnstimeofday(&data->irq_time);
-   data->irq_fired = 1;
+   getnstimeofday(&latency_devp->irq_time);
+   latency_devp->irq_fired = 1;
    
-   gpio_set_value(data->gpio_pin, 1);
+   gpio_set_value(latency_devp->gpio_pin, 1);
    
    return IRQ_HANDLED;
 }
 
 
 static void irq_latency_timer_handler(unsigned long ptr) {
-   struct data* data = (struct data*)ptr;
+   struct latency_dev* latency_devp = (struct latency_dev*)ptr;
    u8 test_ok = 0;
    
-   if (data->irq_fired) {
-      struct timespec delta = timespec_sub(data->irq_time, data->gpio_time);
+   if (latency_devp->irq_fired) {
+      struct timespec delta = timespec_sub(latency_devp->irq_time, latency_devp->gpio_time);
          if (delta.tv_sec > 0) {
             printk(KERN_INFO D_NAME
                " : GPIO IRQ triggered after > 1 sec, something is fishy.\n");
-            data->missed_irqs++;
+            latency_devp->missed_irqs++;
          } else {
-            data->avg_nsecs = data->avg_nsecs ?
+            latency_devp->avg_nsecs = latency_devp->avg_nsecs ?
                (unsigned long)(((unsigned long long)delta.tv_nsec +
-                  (unsigned long long)data->avg_nsecs) >> 1) :
+                  (unsigned long long)latency_devp->avg_nsecs) >> 1) :
                   delta.tv_nsec;
-            data->last_nsecs = (unsigned long) delta.tv_nsec;
+            latency_devp->last_nsecs = (unsigned long) delta.tv_nsec;
             test_ok = 1;
          }
 
-      data->irq_fired = 0;
+      latency_devp->irq_fired = 0;
    } else {
-      data->missed_irqs++;
+      latency_devp->missed_irqs++;
    }
 
-   if (test_ok && ++data->test_count >= NUM_TESTS) {
+   if (test_ok && ++latency_devp->test_count >= NUM_TESTS) {
       printk(KERN_INFO D_NAME
          " : finished %u passes. average GPIO IRQ latency is %lu nsecs.\n",
-            NUM_TESTS, data->avg_nsecs);
+            NUM_TESTS, latency_devp->avg_nsecs);
 	   		
       goto stopTesting;
    } else {
-      if (data->missed_irqs > MISSED_IRQ_MAX) {
+      if (latency_devp->missed_irqs > MISSED_IRQ_MAX) {
          printk(KERN_INFO D_NAME " : too many interrupts missed. "
             "check your jumper cable and reload this module!\n");
 
       goto stopTesting;
    }
 	   
-      mod_timer(&data->timer, jiffies + TEST_INTERVAL);
+      mod_timer(&latency_devp->timer, jiffies + TEST_INTERVAL);
 	   
-      getnstimeofday(&data->gpio_time);
-      gpio_set_value(data->gpio_pin, 0);
+      getnstimeofday(&latency_devp->gpio_time);
+      gpio_set_value(latency_devp->gpio_pin, 0);
    }
 	
    return;
