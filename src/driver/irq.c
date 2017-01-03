@@ -143,17 +143,19 @@ err_return:
 }
 
 void release_gpio_irq(struct latency_dev *latency_devp) {
+   disable_irq(test_data.irq);
+   test_data.irq_enabled = 0;
+   
    del_timer_sync(&latency_devp->timer);
 	
-   free_irq(latency_devp->irq, (void*)&data);
+   free_irq(latency_devp->irq, (void*)latency_devp);
 	
    gpio_free(latency_devp->irq_pin);
    gpio_free(latency_devp->gpio_pin);
 	
-   printk(KERN_INFO D_NAME " : unloaded IRQ latency test.\n");
 }
 
-static irqreturn_t irq_latency_interrupt_handler(int irq, void* dev_id) {
+static irqreturn_t irq_handler(int irq, void* dev_id) {
    struct latency_dev* latency_devp = (struct latency_dev*)dev_id;
    
    getnstimeofday(&latency_devp->irq_time);
@@ -165,55 +167,24 @@ static irqreturn_t irq_latency_interrupt_handler(int irq, void* dev_id) {
 }
 
 
-static void irq_latency_timer_handler(unsigned long ptr) {
+static void timer_handler(unsigned long ptr) {
    struct latency_dev* latency_devp = (struct latency_dev*)ptr;
-   u8 test_ok = 0;
-   
+
    if (latency_devp->irq_fired) {
       struct timespec delta = timespec_sub(latency_devp->irq_time, latency_devp->gpio_time);
-         if (delta.tv_sec > 0) {
-            printk(KERN_INFO D_NAME
-               " : GPIO IRQ triggered after > 1 sec, something is fishy.\n");
-            latency_devp->missed_irqs++;
-         } else {
-            latency_devp->avg_nsecs = latency_devp->avg_nsecs ?
-               (unsigned long)(((unsigned long long)delta.tv_nsec +
-                  (unsigned long long)latency_devp->avg_nsecs) >> 1) :
-                  delta.tv_nsec;
-            latency_devp->last_nsecs = (unsigned long) delta.tv_nsec;
-            test_ok = 1;
-         }
+        latency_devp->avg_nsecs = latency_devp->avg_nsecs ?
+            (unsigned long)(((unsigned long long)delta.tv_nsec +
+                (unsigned long long)latency_devp->avg_nsecs) >> 1) :
+                delta.tv_nsec;
+        latency_devp->last_nsecs = (unsigned long) delta.tv_nsec;
+    }
 
-      latency_devp->irq_fired = 0;
-   } else {
-      latency_devp->missed_irqs++;
-   }
-
-   if (test_ok && ++latency_devp->test_count >= NUM_TESTS) {
-      printk(KERN_INFO D_NAME
-         " : finished %u passes. average GPIO IRQ latency is %lu nsecs.\n",
-            NUM_TESTS, latency_devp->avg_nsecs);
-	   		
-      goto stopTesting;
-   } else {
-      if (latency_devp->missed_irqs > MISSED_IRQ_MAX) {
-         printk(KERN_INFO D_NAME " : too many interrupts missed. "
-            "check your jumper cable and reload this module!\n");
-
-      goto stopTesting;
-   }
-	   
+      latency_devp->irq_fired = 0; 
       mod_timer(&latency_devp->timer, jiffies + TEST_INTERVAL);
 	   
       getnstimeofday(&latency_devp->gpio_time);
       gpio_set_value(latency_devp->gpio_pin, 0);
    }
 	
-   return;
-	
-stopTesting:
-   if (latency_devp->irq_enabled) {
-      disable_irq(latency_devp->irq);
-      latency_devp->irq_enabled = 0;
-   }
+   return 0;
 }
