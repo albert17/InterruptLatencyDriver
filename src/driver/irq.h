@@ -1,7 +1,10 @@
 #ifndef IRQ_H
 #define IRQ_H
 
+#define DEVICENAME "latency"
 #define AM33XX_CONTROL_BASE 0x44e10000
+#define OUTPUT 0x7 | (2 << 3)
+#define INPUT 0x7 | (2 << 3) | (1 << 5)
 
 /* Structures */
 struct latency_dev {
@@ -18,7 +21,7 @@ struct latency_dev {
    struct cdev cdev;
 };
 
-static int setup_pinmux(void);
+static int setup_pinmux(struct latency_dev *latency_devp);
 static int configure_gpio_irq(struct latency_dev *latency_devp);
 static void release_gpio_irq(struct latency_dev *latency_devp);
 static irqreturn_t test_irq_latency_interrupt_handler(int irq, void* dev_id);

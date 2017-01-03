@@ -1,5 +1,4 @@
 /* Defines */
-#define DEVICENAME "latency"
 #define LAST 0
 #define AVG 1
 

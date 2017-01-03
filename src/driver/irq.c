@@ -8,56 +8,99 @@
 
 #include "irq.h"
 
-static int setup_pinmux(void) {
-   int i;
-   static u32 pins[] = { // offsets in AM335x ref man Table 9-10, upon pin names
-			 // pin names: from table/mode0 in BB ref manual
-      AM33XX_CONTROL_BASE + 0x878,   // test pin (60): gpio1_28 (beaglebone p9/12) - 1*32+28 = 60
-				     // note that 2 and 3 are coded in three bits, since 0x7 needs 3b
-      0x7 | (2 << 3),                //       mode 7 (gpio), PULLUP, OUTPUT: 010111
-      AM33XX_CONTROL_BASE + 0x840,   // irq pin (48): gpio1_16 (beaglebone p9/15) - 1*32+16 = 48
-      0x7 | (2 << 3) | (1 << 5),     //       mode 7 (gpio), PULLUP, INPUT: 110111
-   };
+static u32 pins8_offset [47] = {};
+static u32 pins8_val [47] = {};
+static u32 pins9_offset [47] = {};
+static u32 pins9_val [47] = {};
 
-   for (i=0; i<4; i+=2) {	// map the mapped i/o addresses to kernel high memory
-      void* addr = ioremap(pins[i], 4);
+static int setup_pinmux(struct latency_dev *latency_devp) { 
+   u16 irq_pin = latencty_devp->irq_pin;
+   u16 gpio_pin = latencty_devp->gpio_pin;
+   u16 irq_offset, gpio_offset;
 
-      if (NULL == addr)
-         return -EBUSY;
-
-      iowrite32(pins[i+1], addr); // write settings for each pin
-      iounmap(addr);
+   // Check irq_pin range
+   if((irq_pin % 100) >= 0 && (irq_pin % 100) <= 46) {
+       if (irq_pin >= 900) {
+           irq_offset = pin9_offset[irq_pin % 100];
+           irq_pin = pin9_value[irq_pin % 100];
+       }
+       else if(irq_pin >= 800) {
+           irq_offset = pin8_offset[irq_pin % 100];
+           irq_pin = pin8_value[irq_pin % 100];
+       }
+       else {
+           return -1;
+       }
    }
 
-   return 0;
+   // Check gpio_pin range
+   if((gpio_pin % 100) >= 0 && (gpio_pin % 100) <= 46) {
+       if (gpio_pin >= 900) {
+           gpio_offset = pin9_offset[gpio_pin % 100];
+           gpio_pin = pin9_value[gpio_pin % 100];
+       }
+       else if(gpio_pin >= 800) {
+           gpio_offset = pin8_offset[gpio_pin % 100];
+           gpio_pin = pin8_value[gpio_pin % 100];
+       }
+       else {
+           return -1;
+       }
+   }
+
+   // Check de pin is a GPIO
+   if(irq_offset == 0 | gpio_pin == 0) {
+       return -1;
+   }
+   
+    // Write irq_pin setting
+    void* addr = ioremap(irq_offset, 4);
+
+    if (NULL == addr) { return -EBUSY; }
+
+    iowrite32(INPUT, addr); // write settings for each pin
+    iounmap(addr);
+
+    // Write irq_pin setting 
+    void* addr = ioremap(gpio_offset, 4);
+
+    if (NULL == addr) {return -EBUSY; }
+
+    iowrite32(OUTPUT, addr); // write settings for each pin
+    iounmap(addr);
+
+    // Set Beaglebone pins number
+    latencty_devp->irq_pin = irq_pin;
+    latencty_devp->gpio_pin = gpio_pin;
+    return 0;
 }
 
 int configure_gpio_irq(struct latency_dev *latency_devp) {
 
    ret = setup_pinmux();
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " irq_latency : failed to apply pinmux settings.\n");
+      printk(KERN_ALERT D_NAME " : failed to apply pinmux settings.\n");
       goto err_return;
    }
 	
    ret = gpio_request_one(latency_devp->gpio_pin, GPIOF_OUT_INIT_HIGH,
-      DRV_NAME " gpio");
+      D_NAME " gpio");
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " irq_latency : failed to request GPIO pin %d.\n",
+      printk(KERN_ALERT D_NAME " : failed to request GPIO pin %d.\n",
          latency_devp->gpio_pin);
       goto err_return;
    }
 	
-   ret = gpio_request_one(latency_devp->irq_pin, GPIOF_IN, DRV_NAME " irq");
+   ret = gpio_request_one(latency_devp->irq_pin, GPIOF_IN, D_NAME " irq");
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " irq_latency : failed to request IRQ pin %d.\n",
+      printk(KERN_ALERT D_NAME " : failed to request IRQ pin %d.\n",
          latency_devp->irq_pin);
       goto err_free_gpio_return;
    }
 	
    ret = gpio_to_irq(latency_devp->irq_pin);
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " irq_latency : failed to get IRQ for pin %d.\n",
+      printk(KERN_ALERT D_NAME " : failed to get IRQ for pin %d.\n",
          latency_devp->irq_pin);
       goto err_free_irq_return;
    } else {
@@ -69,11 +112,11 @@ int configure_gpio_irq(struct latency_dev *latency_devp) {
       latency_devp->irq,
       test_irq_latency_interrupt_handler,
       IRQF_TRIGGER_FALLING | IRQF_DISABLED,
-      DRV_NAME,
+      D_NAME,
       (void*)&data
    );
    if (ret < 0) {
-      printk(KERN_ALERT DRV_NAME " irq_latency : failed to enable IRQ %d for pin %d.\n",
+      printk(KERN_ALERT D_NAME " : failed to enable IRQ %d for pin %d.\n",
          latency_devp->irq, latency_devp->irq_pin);
       goto err_free_irq_return;
    } else
@@ -85,8 +128,8 @@ int configure_gpio_irq(struct latency_dev *latency_devp) {
    latency_devp->timer.function = test_irq_latency_timer_handler;
    add_timer(&latency_devp->timer);
 
-   printk(KERN_INFO DRV_NAME
-      " irq_latency : beginning GPIO IRQ latency test (%u passes in %d seconds).\n",
+   printk(KERN_INFO D_NAME
+      " : beginning GPIO IRQ latency test (%u passes in %d seconds).\n",
       NUM_TESTS, (NUM_TESTS * TEST_INTERVAL) / HZ);
 	
    return 0;
@@ -107,7 +150,7 @@ void release_gpio_irq(struct latency_dev *latency_devp) {
    gpio_free(latency_devp->irq_pin);
    gpio_free(latency_devp->gpio_pin);
 	
-   printk(KERN_INFO DRV_NAME " irq_latency : unloaded IRQ latency test.\n");
+   printk(KERN_INFO D_NAME " : unloaded IRQ latency test.\n");
 }
 
 static irqreturn_t irq_latency_interrupt_handler(int irq, void* dev_id) {
@@ -129,8 +172,8 @@ static void irq_latency_timer_handler(unsigned long ptr) {
    if (data->irq_fired) {
       struct timespec delta = timespec_sub(data->irq_time, data->gpio_time);
          if (delta.tv_sec > 0) {
-            printk(KERN_INFO DRV_NAME
-               " irq_latency : GPIO IRQ triggered after > 1 sec, something is fishy.\n");
+            printk(KERN_INFO D_NAME
+               " : GPIO IRQ triggered after > 1 sec, something is fishy.\n");
             data->missed_irqs++;
          } else {
             data->avg_nsecs = data->avg_nsecs ?
@@ -147,14 +190,14 @@ static void irq_latency_timer_handler(unsigned long ptr) {
    }
 
    if (test_ok && ++data->test_count >= NUM_TESTS) {
-      printk(KERN_INFO DRV_NAME
-         " irq_latency : finished %u passes. average GPIO IRQ latency is %lu nsecs.\n",
+      printk(KERN_INFO D_NAME
+         " : finished %u passes. average GPIO IRQ latency is %lu nsecs.\n",
             NUM_TESTS, data->avg_nsecs);
 	   		
       goto stopTesting;
    } else {
       if (data->missed_irqs > MISSED_IRQ_MAX) {
-         printk(KERN_INFO DRV_NAME " irq_latency : too many interrupts missed. "
+         printk(KERN_INFO D_NAME " : too many interrupts missed. "
             "check your jumper cable and reload this module!\n");
 
       goto stopTesting;

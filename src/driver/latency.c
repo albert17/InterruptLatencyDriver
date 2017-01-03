@@ -26,16 +26,16 @@ struct file_operations fops = {
 int latency_init(void) {
     int ret;
     // obtain major number dinamically
-    ret = alloc_chrdev_region(&dev_num,0,1,DEVICENAME);
+    ret = alloc_chrdev_region(&dev_num,0,1,D_NAME);
     if(ret < 0) {
-        printk(KERN_ALERT " irq_latency : failed to allocate major number\n");
+        printk(KERN_ALERT D_NAME " : failed to allocate major number\n");
         return ret;
     }
     else {
-        printk(KERN_INFO " irq_latency : major number allocated succesful\n");
+        printk(KERN_INFO D_NAME " : major number allocated succesful\n");
     }
     ret = MAJOR(dev_num);
-    printk(KERN_INFO "irq_latency : major number of device is %d\n", ret);
+    printk(KERN_INFO D_NAME " : major number of device is %d\n", ret);
 
     // Allocate latency_dev
     latency_devp = kmalloc(sizeof(struct latency_dev), GFP_KERNEL);
@@ -48,11 +48,11 @@ int latency_init(void) {
     // Add cdev structure to the system
     ret = cdev_add(latency_devp->lcdev,dev_num,1);
     if(ret < 0) {
-        printk(KERN_ALERT "irq_latency : device adding to the kerknel failed\n");
+        printk(KERN_ALERT D_NAME " : device adding to the kerknel failed\n");
         return ret;
     }
     else {
-        printk(KERN_INFO "irq_latency : device additin to the kernel succesful\n");
+        printk(KERN_INFO D_NAME " : device additin to the kernel succesful\n");
     }
     return 0;
 }
@@ -60,15 +60,15 @@ int latency_init(void) {
 void latency_exit(void) {
     // Removes cdev structure
     cdev_del(latency_devp->cdev);
-    printk(KERN_INFO " irq_latency : removed the mcdev from kernel\n");
+    printk(KERN_INFO D_NAME " : removed the mcdev from kernel\n");
 
     // Free memory
     kfree(latency_devp);
 
     // Unregister device
     unregister_chrdev_region(dev_num,1);
-    printk(KERN_INFO "irq_latency : unregistered the device numbers\n");
-    printk(KERN_ALERT " irq_latency : character driver is exiting\n");
+    printk(KERN_INFO D_NAME " : unregistered the device numbers\n");
+    printk(KERN_ALERT D_NAME " : character driver is exiting\n");
 }
 
 static int latencty_open(struct inode *inode, struct file *fp) {
@@ -83,17 +83,31 @@ static int latencty_open(struct inode *inode, struct file *fp) {
 
 static int latency_close(struct inode *inode, struct file *fp) {
     struct latency_dev *dev =fp->private_data;
-    release_gpio_irq(dev);
+    int ret;
+    ret = release_gpio_irq(dev);
+    if (ret == -1) {
+        printk(KERN_ALERT D_NAME " : failed to release pins.\n");
+        return ret;
+    }
     return 0;
 }
 
 static int latency_ioctl(struct file *fp, u16 irq_pin, u16 gpio_pin, int period){
     struct latency_dev *dev =fp->private_data;
-    release_gpio_irq(dev);
+    int ret;
+    ret = release_gpio_irq(dev);
+    if (ret == -1) {
+        printk(KERN_ALERT D_NAME " : failed to release pins.\n");
+        return ret;
+    }
     dev->irq_pin = irq_pin;
     dev->gpio_pin = gpio_pin;
     dev->period = (HZ/period);
-    configure_gpio_irq(dev);
+    ret = configure_gpio_irq(dev);
+    if (ret == -1) {
+        printk(KERN_ALERT D_NAME " : failed to configure pins.\n");
+        return ret;
+    }
 }
 
 static int latency_read(struct file *fp, int type) {
