@@ -2,6 +2,11 @@
 #define LAST 0
 #define AVG 1
 
+enum mode {
+    SET,
+    ON,
+    OFF,
+}
 /* Driver functions declaration*/
 int latency_init(void);
 void latency_exit(void);

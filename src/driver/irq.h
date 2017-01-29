@@ -16,6 +16,7 @@ struct latency_dev {
    unsigned long avg_nsecs, last_nsecs;
    unsigned int period;
    struct semaphore sem;
+   enum mode state;
    struct cdev cdev;
 };
 

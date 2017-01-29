@@ -12,6 +12,7 @@
 /* Variables */
 static struct latency_dev lat_devp;
 static dev_t dev_num;
+static atomic_t available = ATOMIC_INIT(1);
 
 struct file_operations fops = {
     .owner = THIS_MODULE,
@@ -73,9 +74,13 @@ void latency_exit(void) {
 
 static int latencty_open(struct inode *inode, struct file *fp) {
     struct latency_dev *dev; /* device information */
-
+    if (! atomic_dec_and_test (&available)) {
+        atomic_inc(&available);
+        return -EBUSY; /* already open */
+    }
 	/*  Find the device */
 	dev = container_of(inode->i_cdev, struct latencty_dev, cdev);
+    dev->state = OFF;
 	filp->private_data = dev;
 
     return 0; /* success */    
@@ -89,24 +94,43 @@ static int latency_close(struct inode *inode, struct file *fp) {
         printk(KERN_ALERT D_NAME " : failed to release pins.\n");
         return ret;
     }
+    atomic_inc(&available); /* release the device */
     return 0;
 }
 
-static int latency_ioctl(struct file *fp, u16 irq_pin, u16 gpio_pin, int period){
+static int latency_ioctl(struct file *fp, enum Mode mode, u16 irq_pin, u16 gpio_pin, int period){
     struct latency_dev *dev =fp->private_data;
     int ret;
-    ret = release_gpio_irq(dev);
-    if (ret == -1) {
-        printk(KERN_ALERT D_NAME " : failed to release pins.\n");
-        return ret;
-    }
-    dev->irq_pin = irq_pin;
-    dev->gpio_pin = gpio_pin;
-    dev->period = (HZ/period);
-    ret = configure_gpio_irq(dev);
-    if (ret == -1) {
-        printk(KERN_ALERT D_NAME " : failed to configure pins.\n");
-        return ret;
+    switch (mode)
+    {
+        case SET:
+            if (dev->state == OFF) {
+                dev->irq_pin = irq_pin;
+                dev->gpio_pin = gpio_pin;
+                dev->period = (HZ/period);
+                dev->state = SET;
+            break;
+        case ON:
+            if(dev->satate == SET) {
+                ret = configure_gpio_irq(dev);
+                if (ret == -1) {
+                    printk(KERN_ALERT D_NAME " : failed to configure pins.\n");
+                    return ret;
+                }
+                dev->state = ON;
+            }
+            break;
+        case OFF:
+            if(dev->state == ON) {
+                ret = release_gpio_irq(dev);
+                if (ret == -1) {
+                    printk(KERN_ALERT D_NAME " : failed to release pins.\n");
+                    return ret;
+                }
+                dev->state = OFF;
+            }
+        default:
+            break;
     }
 }
 
