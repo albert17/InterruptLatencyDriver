@@ -172,11 +172,15 @@ static void timer_handler(unsigned long ptr) {
 
    if (latency_devp->irq_fired) {
       struct timespec delta = timespec_sub(latency_devp->irq_time, latency_devp->gpio_time);
+        if (down_interruptible(&latency_devp->sem)) {
+            return -ERESTARTSYS;
+        }        
         latency_devp->avg_nsecs = latency_devp->avg_nsecs ?
             (unsigned long)(((unsigned long long)delta.tv_nsec +
                 (unsigned long long)latency_devp->avg_nsecs) >> 1) :
                 delta.tv_nsec;
         latency_devp->last_nsecs = (unsigned long) delta.tv_nsec;
+        up(&latency_devp->sem);
     }
 
       latency_devp->irq_fired = 0; 

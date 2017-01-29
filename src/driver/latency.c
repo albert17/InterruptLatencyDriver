@@ -136,6 +136,9 @@ static int latency_ioctl(struct file *fp, enum Mode mode, u16 irq_pin, u16 gpio_
 
 static int latency_read(struct file *fp, int type) {
     struct latency_dev *dev =fp->private_data;
+    if (down_interruptible(&dev->sem)) {
+        return -ERESTARTSYS;
+    }
     switch (type)
     {
         case LAST:
@@ -145,6 +148,7 @@ static int latency_read(struct file *fp, int type) {
         default:
             return -1;
     }
+    up(&dev->sem);
 }
 
 MODULE_AUTHOR("ALBERTO ALVAREZ (alberto.alvarez.aldea@gmail.com)");
