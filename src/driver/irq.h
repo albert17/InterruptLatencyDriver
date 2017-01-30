@@ -2,18 +2,11 @@
 #define IRQ_H
 
 #include <linux/interrupt.h>
+#include "latency.h"
 
-#define D_NAME "latency"
 #define AM33XX_CONTROL_BASE 0x44e10000
 #define OUTPUT 0x7 | (2 << 3)
 #define INPUT 0x7 | (2 << 3) | (1 << 5)
-
-/* Structures */
-enum mode {
-    SET,
-    ON,
-    OFF,
-};
 
 struct latency_dev {
    struct timespec gpio_time, irq_time;
