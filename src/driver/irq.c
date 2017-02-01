@@ -12,6 +12,11 @@
 #include "irq.h"
 #include "latency.h"
 
+MODULE_AUTHOR("ALBERTO ALVAREZ (alberto.alvarez.aldea@gmail.com)");
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Measure interrupt latency");
+MODULE_VERSION("1.0");
+
 static u32 pins8_offset[47] = {0,0,0x818,0x81C,0x808,0x80C,0,0,0,0,0x834,0x830,0,0x828,0x83C,0x838,0x82C,0x88C,0,0x884,0x880,0x814,0x810,0x804,0x800,0x87C,0x8E0,0x8E8,0x8E4,0x8EC,0,0,0,0,0,0,0,0,0x8B8,0x8BC,0x8B4,0x8B0,0x8A8,0x8AC,0x8A0,0x8A4};
 static u32 pins8_value[47] = {0,0,38,39,34,35,0,0,0,0,45,44,0,26,47,46,27,65,0,63,62,37,36,33,32,61,86,88,87,89,0,0,0,0,0,0,0,0,76,77,74,75,72,73,70,71};
 static u32 pins9_offset[47] = {0,0,0,0,0,0,0,0,0,0,0,0x878,0,0,0x840,0,0,0,0,0,0,0,0x844,0,0x9AC,0,0x9A4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x964,0,0,0,0};

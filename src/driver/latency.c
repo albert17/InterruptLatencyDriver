@@ -47,6 +47,7 @@ int latency_init(void) {
     ret = MAJOR(dev_num);
     printk(KERN_INFO D_NAME " : major number of device is %d\n", ret);
 
+    latency_class = class_create(THIS_MODULE, "latency"); 
     // Allocate latency_dev
     latency_devp = kmalloc(sizeof(struct latency_dev), GFP_KERNEL);
     
@@ -75,6 +76,9 @@ void latency_exit(void) {
     // Free memory
     kfree(latency_devp);
 
+    // Remove /sys
+    class_destroy(latency_class);
+    
     // Unregister device
     unregister_chrdev_region(dev_num,1);
     printk(KERN_INFO D_NAME " : unregistered the device numbers\n");
@@ -155,7 +159,9 @@ long latency_read(struct file *fp, int type) {
 }
 
 MODULE_AUTHOR("ALBERTO ALVAREZ (alberto.alvarez.aldea@gmail.com)");
+MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Measure interrupt latency");
+MODULE_VERSION("1.0");
 
 module_init(latency_init);
 module_exit(latency_exit);
