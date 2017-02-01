@@ -5,7 +5,7 @@
 #include <linux/types.h>
 
 /* Defines */
-#define D_NAME "latency"
+#define D_NAME "measure"
 #define LATENCY_IOC_MAGIC '$'
 
 /* Structures */

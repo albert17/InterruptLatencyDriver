@@ -90,13 +90,14 @@ int latency_open(struct inode *inode, struct file *fp) {
     struct latency_dev *dev; /* device information */
     if (!atomic_dec_and_test (&available)) {
         atomic_inc(&available);
+        printk(KERN_ALERT D_NAME " : device occuped\n");
         return -EBUSY; /* already open */
     }
 	/*  Find the device */
 	dev = container_of(inode->i_cdev, struct latency_dev, cdev);
     dev->state = OFF;
 	fp->private_data = dev;
-
+    printk(KERN_ALERT D_NAME " : device oppened\n");
     return 0; /* success */    
 }
 
