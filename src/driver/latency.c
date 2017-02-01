@@ -16,9 +16,8 @@ int latency_init(void);
 void latency_exit(void);
 int latency_open(struct inode *inode, struct file *fp);
 int latency_close(struct inode *inode, struct file *fp);
-long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
-int latency_ioctl(struct file *fp, enum mode mode, u16 irq_pin, u16 gpio_pin, int period);
-ssize_t latency_read(struct file *fp, char __user *, size_t, loff_t *);
+long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg);
+ssize_t latency_read(struct file *fp, char __user *buf, size_t count, loff_t *fpos);
 /* Variables */
 static struct latency_dev *latency_devp;
 static struct class*  latency_class  = NULL;
@@ -109,22 +108,28 @@ int latency_close(struct inode *inode, struct file *fp) {
     return 0;
 }
 
-long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
-int latency_ioctl(struct file *fp, enum mode mode, u16 irq_pin, u16 gpio_pin, int period) {
+long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
     struct latency_dev *dev =fp->private_data;
-    int ret;
-    switch (mode)
-    {
+    int ret = 0;
+    struct latency_buffer *lb;
+
+	if (_IOC_TYPE(cmd) != LATENCY_IOC_MAGIC) {
+        return -ENOTTY;
+    }
+
+    switch(cmd) {
         case SET:
             if (dev->state == OFF) {
-                dev->irq_pin = irq_pin;
-                dev->gpio_pin = gpio_pin;
-                dev->period = (HZ/period);
+                ret = copy_from_user((char *)lb, (char *)arg, sizeof(*lb));
+                if (ret) { return -EFAULT;}
+                dev->irq_pin = lb->irq_pin;
+                dev->gpio_pin = lb->gpio_pin;
+                dev->period = (HZ/lb->period);
                 dev->state = SET;
             }
             break;
         case ON:
-            if(dev->state == SET) {
+            if (dev->state == SET) {
                 ret = configure_gpio_irq(dev);
                 if (ret == -1) {
                     printk(KERN_ALERT D_NAME " : failed to configure pins.\n");
@@ -134,14 +139,15 @@ int latency_ioctl(struct file *fp, enum mode mode, u16 irq_pin, u16 gpio_pin, in
             }
             break;
         case OFF:
-            if(dev->state == ON) {
+            if (dev->state == ON) {
                 release_gpio_irq(dev);
                 dev->state = OFF;
             }
-        default:
             break;
+        default:
+            return -ENOTTY;
     }
-    return 1;
+    return ret;
 }
 
 ssize_t latency_read(struct file *fp, char __user *buf, size_t count, loff_t *fpos) {
