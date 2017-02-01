@@ -1,11 +1,12 @@
 /* Includes */
-#include<linux/module.h>
-#include<linux/kernel.h>
-#include<linux/fs.h>
-#include<linux/cdev.h>
-#include<linux/semaphore.h>
-#include<linux/uaccess.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
+#include <linux/semaphore.h>
+#include <linux/uaccess.h>
 #include <linux/slab.h>	
+#include <linux/device.h>
 
 #include "irq.h"
 #include "latency.h"
@@ -15,11 +16,12 @@ int latency_init(void);
 void latency_exit(void);
 int latency_open(struct inode *inode, struct file *fp);
 int latency_close(struct inode *inode, struct file *fp);
+long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
 int latency_ioctl(struct file *fp, enum mode mode, u16 irq_pin, u16 gpio_pin, int period);
-long latency_read(struct file *fp, int type);
-
+ssize_t latency_read(struct file *fp, char __user *, size_t, loff_t *);
 /* Variables */
 static struct latency_dev *latency_devp;
+static struct class*  latency_class  = NULL;
 static dev_t dev_num;
 static atomic_t available = ATOMIC_INIT(1);
 
@@ -87,7 +89,7 @@ void latency_exit(void) {
 
 int latency_open(struct inode *inode, struct file *fp) {
     struct latency_dev *dev; /* device information */
-    if (! atomic_dec_and_test (&available)) {
+    if (!atomic_dec_and_test (&available)) {
         atomic_inc(&available);
         return -EBUSY; /* already open */
     }
@@ -107,6 +109,7 @@ int latency_close(struct inode *inode, struct file *fp) {
     return 0;
 }
 
+long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
 int latency_ioctl(struct file *fp, enum mode mode, u16 irq_pin, u16 gpio_pin, int period) {
     struct latency_dev *dev =fp->private_data;
     int ret;
@@ -141,21 +144,17 @@ int latency_ioctl(struct file *fp, enum mode mode, u16 irq_pin, u16 gpio_pin, in
     return 1;
 }
 
-long latency_read(struct file *fp, int type) {
+ssize_t latency_read(struct file *fp, char __user *buf, size_t count, loff_t *fpos) {
     struct latency_dev *dev =fp->private_data;
+    ssize_t res;
+    char status[128] = "Nicuesa\0";
     if (down_interruptible(&dev->sem)) {
         return -ERESTARTSYS;
     }
-    switch (type)
-    {
-        case LAST:
-            return dev->avg_nsecs;
-        case AVG:
-            return dev->last_nsecs;
-        default:
-            return -1;
-    }
+    res = copy_to_user(buf, status, strlen(status));
+    //res = dev->avg_nsecs;
     up(&dev->sem);
+    return res;
 }
 
 MODULE_AUTHOR("ALBERTO ALVAREZ (alberto.alvarez.aldea@gmail.com)");
