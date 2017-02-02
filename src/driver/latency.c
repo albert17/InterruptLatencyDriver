@@ -30,6 +30,8 @@ ssize_t latency_read(struct file *fp, char __user *buf, size_t count, loff_t *fp
 static struct latency_dev *latency_devp;
 static struct class *latency_class  = NULL;
 struct latency_buffer *lb;
+struct latency_result *result;
+
 static dev_t dev_num;
 static atomic_t available = ATOMIC_INIT(1);
 
@@ -60,10 +62,7 @@ int latency_init(void) {
     latency_class = class_create(THIS_MODULE, "latency"); 
     // Allocate latency_dev
     latency_devp = kmalloc(sizeof(struct latency_dev), GFP_KERNEL);
-
-    // Allocate latency_buffer
-    lb = kmalloc(sizeof(struct latency_buffer), GFP_KERNEL);
-
+    
     // Create, allocate and initialize cdev structure
     cdev_init(&latency_devp->cdev, &fops);
     latency_devp->cdev.ops = &fops;
@@ -144,19 +143,19 @@ long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
             printk(KERN_ALERT D_NAME " : ioctl set called\n");
             if (dev->state == OFF) {
                 printk(KERN_ALERT D_NAME " : ioctl copying from user\n");
-                if(copy_from_user(lb, (struct latency_buffer *)arg, sizeof(struct latency_buffer))) { 
+                if(copy_from_user(&dev->lb, (struct latency_buffer *)arg, sizeof(struct latency_buffer))) { 
                     printk(KERN_ALERT D_NAME " : ioctl fail copy from user\n");
                     return -EFAULT;
                 }
-                dev->irq_pin = lb->irq_pin;
-                dev->gpio_pin = lb->gpio_pin;
-                dev->period = (HZ/lb->period);
+                dev->lb.period = (HZ/dev->lb.period);
                 dev->state = SET;
             }
             break;
         case ION:
             printk(KERN_ALERT D_NAME " : ioctl on called\n");
             if (dev->state == SET) {
+                dev->res.avg = 0; dev->res.var = 0;
+                dev->res.max = 0; dev->res.min = -1;
                 printk(KERN_ALERT D_NAME " : ioctl configuring gpio\n");
                 ret = configure_gpio_irq(dev);
                 if (ret == -1) {
@@ -182,13 +181,12 @@ long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
 
 ssize_t latency_read(struct file *fp, char __user *buf, size_t count, loff_t *fpos) {
     struct latency_dev *dev =fp->private_data;
-    ssize_t res;
-    char status[128];
-    sprintf(status,"%d",(int)dev->last_nsecs);
     printk(KERN_ALERT D_NAME " : read function called\n");
-    res = copy_to_user(buf, status, strlen(status));
-    //res = dev->avg_nsecs;
-    return res;
+    if(copy_to_user((struct latency_result*)buf, &dev->res, sizeof(struct latency_result))) {
+        printk(KERN_ALERT D_NAME " : read fail copy to user\n");
+        return -EFAULT;
+    }
+    return 0;
 }
 
 MODULE_AUTHOR("ALBERTO ALVAREZ (alberto.alvarez.aldea@gmail.com)");

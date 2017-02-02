@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
     printf("[+] Started device\n");
     
     // Wait 1 seconds
-    sleep(1);
+    sleep(10);
 
     // Stoping device
     printf("[+] Stopping device\n");
@@ -55,15 +55,17 @@ int main(int argc, char *argv[]) {
     printf("[+] Stopped device\n");
     
     // Get time
-    char result[128];
-    res = read(fd, &result);
+    struct latency_result *result;
+    result = (struct latency_result*) malloc(sizeof(struct latency_result));
+    res = read(fd, result);
     if (res == -1) {
         printf("[-] ERROR: Time cannot be obtained\n");
+        exit(1);
     }
-    else {
-        printf("Result: %s", result);
-    }
-
+    printf("RESULT - Time MIN: %lu ns\n", result->min);
+    printf("RESULT - Time MAX: %lu ns\n", result->max);
+    printf("RESULT - Time AVG: %lu ns\n", result->avg);
+    printf("RESULT - Time VAR: %lu ns\n", result->var);
     // Close device
     printf("[+] Closing device\n");
     close(fd);

@@ -22,13 +22,13 @@ static u32 pins8_value[46] = {0,0,38,39,34,35,0,0,0,0,45,44,0,26,47,46,27,65,0,6
 static u32 pins9_offset[46] = {0,0,0,0,0,0,0,0,0,0,0,0x878,0,0,0x840,0,0,0,0,0,0,0,0x844,0,0x9AC,0,0x9A4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0x964,0,0,0,0};
 static u32 pins9_value[46] = {0,0,0,0,0,0,0,0,0,0,0,60,0,0,48,0,0,0,0,0,0,0,49,0,117,0,115,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,0,0,0,0};
 
-int setup_pinmux(struct latency_dev *latency_devp) { 
-   u16 irq_pin = latency_devp->irq_pin;
-   u16 gpio_pin = latency_devp->gpio_pin;
+int setup_pinmux(struct latency_dev *ldev) { 
+   u16 irq_pin = ldev->lb.irq_pin;
+   u16 gpio_pin = ldev->lb.gpio_pin;
    u32 irq_offset = 0, gpio_offset = 0;
    void* addr;
-   printk(KERN_ALERT D_NAME " : setpin-mux-gpio1:%d\n", latency_devp->gpio_pin);
-   printk(KERN_ALERT D_NAME " : setpin-mux-irq1:%d\n", latency_devp->irq_pin);
+   printk(KERN_ALERT D_NAME " : setpin-mux-gpio1:%d\n", ldev->lb.gpio_pin);
+   printk(KERN_ALERT D_NAME " : setpin-mux-irq1:%d\n", ldev->lb.irq_pin);
    // Check irq_pin range
    if((irq_pin % 100) >= 0 && (irq_pin % 100) <= 46) {
        if (irq_pin >= 900) {
@@ -81,128 +81,149 @@ int setup_pinmux(struct latency_dev *latency_devp) {
     iounmap(addr);
 
     // Set Beaglebone pins number
-    latency_devp->irq_pin = irq_pin;
-    printk(KERN_ALERT D_NAME " : setpin-mux-irq2:%d\n", latency_devp->irq_pin);
-    latency_devp->gpio_pin = gpio_pin;
-    printk(KERN_ALERT D_NAME " : setpin-mux-gpio2:%d\n", latency_devp->gpio_pin);
+    ldev->lb.irq_pin = irq_pin;
+    printk(KERN_ALERT D_NAME " : setpin-mux-irq2:%d\n", ldev->lb.irq_pin);
+    ldev->lb.gpio_pin = gpio_pin;
+    printk(KERN_ALERT D_NAME " : setpin-mux-gpio2:%d\n", ldev->lb.gpio_pin);
     return 0;
 }
 
-int configure_gpio_irq(struct latency_dev *latency_devp) {
+int configure_gpio_irq(struct latency_dev *ldev) {
    int ret = 0;
    printk(KERN_ALERT D_NAME " : setup_pinmux\n");
-   ret = setup_pinmux(latency_devp);
+   ret = setup_pinmux(ldev);
    if (ret < 0) {
       printk(KERN_ALERT D_NAME " : failed to apply pinmux settings.\n");
       goto err_return;
    }
    printk(KERN_ALERT D_NAME " : gpio_request_one\n");
-   ret = gpio_request_one(latency_devp->gpio_pin, GPIOF_OUT_INIT_HIGH,
+   ret = gpio_request_one(ldev->lb.gpio_pin, GPIOF_OUT_INIT_HIGH,
       D_NAME " gpio");
    if (ret < 0) {
       printk(KERN_ALERT D_NAME " : failed to request GPIO pin %d.\n",
-         latency_devp->gpio_pin);
+         ldev->lb.gpio_pin);
       goto err_return;
    }
    printk(KERN_ALERT D_NAME " : gpio_request_one\n");
-   ret = gpio_request_one(latency_devp->irq_pin, GPIOF_IN, D_NAME " irq");
+   ret = gpio_request_one(ldev->lb.irq_pin, GPIOF_IN, D_NAME " irq");
    if (ret < 0) {
       printk(KERN_ALERT D_NAME " : failed to request IRQ pin %d.\n",
-         latency_devp->irq_pin);
+         ldev->lb.irq_pin);
       goto err_free_gpio_return;
    }
    printk(KERN_ALERT D_NAME " : gpio_to_irq\n");
-   ret = gpio_to_irq(latency_devp->irq_pin);
+   ret = gpio_to_irq(ldev->lb.irq_pin);
    if (ret < 0) {
       printk(KERN_ALERT D_NAME " : failed to get IRQ for pin %d.\n",
-         latency_devp->irq_pin);
+         ldev->lb.irq_pin);
       goto err_free_irq_return;
    } else {
-      latency_devp->irq = (u16)ret;
+      ldev->irq = (u16)ret;
       ret = 0;
    }
    printk(KERN_ALERT D_NAME " : request_any_context_irq\n");
    ret = request_any_context_irq(
-      latency_devp->irq,
+      ldev->irq,
       irq_handler,
       IRQF_TRIGGER_FALLING | IRQF_DISABLED,
       D_NAME,
-      (void*)latency_devp
+      (void*)ldev
    );
    if (ret < 0) {
       printk(KERN_ALERT D_NAME " : failed to enable IRQ %d for pin %d.\n",
-         latency_devp->irq, latency_devp->irq_pin);
+         ldev->irq, ldev->lb.irq_pin);
       goto err_free_irq_return;
-   } else
-      latency_devp->irq_enabled = 1;
+   } else{
+      printk(KERN_ALERT D_NAME " : IRQ enabled\n",
+      ldev->irq_enabled = 1;
+   }
    printk(KERN_ALERT D_NAME " : init_timer\n");
-   init_timer(&latency_devp->timer);
-   latency_devp->timer.expires = jiffies + latency_devp->period;
-   latency_devp->timer.data = (unsigned long)latency_devp;
-   latency_devp->timer.function = timer_handler;
+   init_timer(&ldev->timer);
+   ldev->timer.expires = jiffies + ldev->lb.period;
+   ldev->timer.data = (unsigned long)ldev;
+   ldev->timer.function = timer_handler;
    printk(KERN_ALERT D_NAME " : add_timer\n");
-   add_timer(&latency_devp->timer);
+   add_timer(&ldev->timer);
    printk(KERN_ALERT D_NAME " : correct end\n");
    return 0;
 
 err_free_irq_return:
    printk(KERN_ALERT D_NAME " : irq_pin fail\n");
-   gpio_free(latency_devp->irq_pin);
+   gpio_free(ldev->lb.irq_pin);
 err_free_gpio_return:
    printk(KERN_ALERT D_NAME " : gpio_pin_fail\n");
-   gpio_free(latency_devp->gpio_pin);
+   gpio_free(ldev->lb.gpio_pin);
 err_return:
    return ret;
 }
 
-void release_gpio_irq(struct latency_dev *latency_devp) {
+void release_gpio_irq(struct latency_dev *ldev) {
    printk(KERN_ALERT D_NAME " : disable irq\n");
-   disable_irq(latency_devp->irq);
+   disable_irq(ldev->irq);
    printk(KERN_ALERT D_NAME " : irq enabled = 0\n");
-   latency_devp->irq_enabled = 0;
+   ldev->irq_enabled = 0;
    printk(KERN_ALERT D_NAME " : del timer\n");
-   del_timer_sync(&latency_devp->timer);
+   del_timer_sync(&ldev->timer);
    printk(KERN_ALERT D_NAME " : free_irq\n");
-   free_irq(latency_devp->irq, (void*)latency_devp);
+   free_irq(ldev->irq, (void*)ldev);
    printk(KERN_ALERT D_NAME " : gpio_free\n");
-   gpio_free(latency_devp->irq_pin);
+   gpio_free(ldev->lb.irq_pin);
    printk(KERN_ALERT D_NAME " : gpio_free\n");
-   gpio_free(latency_devp->gpio_pin);
+   gpio_free(ldev->lb.gpio_pin);
 }
 
 irqreturn_t irq_handler(int irq, void* dev_id) {
-   struct latency_dev* latency_devp = (struct latency_dev*)dev_id;
+   struct latency_dev* ldev = (struct latency_dev*)dev_id;
    printk(KERN_ALERT D_NAME " : irq-init\n");
    printk(KERN_ALERT D_NAME " : irq-getnstimeofday\n");
-   getnstimeofday(&latency_devp->irq_time);
-   latency_devp->irq_fired = 1;
-   printk(KERN_ALERT D_NAME " : irq-gpio_set_value:%d\n", latency_devp->gpio_pin);
-   gpio_set_value(latency_devp->gpio_pin, 1);
+   getnstimeofday(&ldev->irq_time);
+   ldev->irq_fired = 1;
+   printk(KERN_ALERT D_NAME " : irq-gpio_set_value:%d\n", ldev->lb.gpio_pin);
+   gpio_set_value(ldev->lb.gpio_pin, 1);
    printk(KERN_ALERT D_NAME " : irq-end\n");
    return IRQ_HANDLED;
 }
 
 
 void timer_handler(unsigned long ptr) {
-   struct latency_dev* latency_devp = (struct latency_dev*)ptr;
+   struct latency_dev* ldev = (struct latency_dev*)ptr;
    struct timespec delta;
+   long error;
    printk(KERN_ALERT D_NAME " : timer-init\n");
-   if (latency_devp->irq_fired) {
-      printk(KERN_ALERT D_NAME " : timer-timespec\n");
-      delta = timespec_sub(latency_devp->irq_time, latency_devp->gpio_time);    
-        latency_devp->avg_nsecs = latency_devp->avg_nsecs ?
-            (unsigned long)(((unsigned long long)delta.tv_nsec +
-                (unsigned long long)latency_devp->avg_nsecs) >> 1) :
-                delta.tv_nsec;
-        latency_devp->last_nsecs = (unsigned long) delta.tv_nsec;
-    }
+   if (ldev->irq_fired) {
+       printk(KERN_ALERT D_NAME " : timer-timespec\n");
+       delta = timespec_sub(ldev->irq_time, ldev->gpio_time); 
+       printk(KERN_ALERT D_NAME " : MEASURED TIME %lu !!!!!!!!\n", (unsigned long) delta.tv_nsec);
 
-      latency_devp->irq_fired = 0; 
+       // Calculate avg
+       ldev->res.avg = ldev->res.avg ?
+            (unsigned long)(((unsigned long long)delta.tv_nsec +
+                (unsigned long long)ldev->res.avg) >> 1) :
+                delta.tv_nsec;
+
+        // Calculate error
+        error = (ldev->res.avg - delta.tv_nsec);
+        ldev->res.var =
+            (unsigned long)(((unsigned long long)ldev->res.var +
+                (unsigned long long)error*error) >> 1);
+        
+        // Set min
+        if((unsigned long) delta.tv_nsec < ldev->res.min) {
+            ldev->res.min = delta.tv_nsec;
+        }
+
+        // Set max
+        if((unsigned long) delta.tv_nsec > ldev->res.max) {
+            ldev->res.max = delta.tv_nsec;   
+        }
+}
+
+      ldev->irq_fired = 0; 
       printk(KERN_ALERT D_NAME " : timer-modtimer\n");
-      mod_timer(&latency_devp->timer, jiffies + latency_devp->period);
+      mod_timer(&ldev->timer, jiffies + ldev->lb.period);
       printk(KERN_ALERT D_NAME " : timer-getnstimeofday\n");
-      getnstimeofday(&latency_devp->gpio_time);
-      printk(KERN_ALERT D_NAME " : timer-gpio-setvalue:%d\n", latency_devp->gpio_pin);
-      gpio_set_value(latency_devp->gpio_pin, 0);
+      getnstimeofday(&ldev->gpio_time);
+      printk(KERN_ALERT D_NAME " : timer-gpio-setvalue:%d\n", ldev->lb.gpio_pin);
+      gpio_set_value(ldev->lb.gpio_pin, 0);
       printk(KERN_ALERT D_NAME " : timer-end\n");
 }

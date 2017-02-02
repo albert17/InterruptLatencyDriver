@@ -11,12 +11,11 @@
 struct latency_dev {
    struct timespec gpio_time, irq_time;
    u16 irq;
-   u16 irq_pin, gpio_pin;
    u8 irq_fired, irq_enabled;
    struct timer_list timer;
-   unsigned long avg_nsecs, last_nsecs;
-   unsigned int period;
    enum io state;
+   struct latency_buffer lb;
+   struct latency_result res;
    struct cdev cdev;
    struct device dev;
 };

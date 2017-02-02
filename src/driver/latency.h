@@ -21,6 +21,15 @@ struct latency_buffer{
      int period;
 };
 
+struct latency_result{
+     unsigned long min;
+     unsigned long max;
+     unsigned long avg;
+     unsigned long var;
+};
+
+
+
 #define ISET _IOW(LATENCY_IOC_MAGIC, SET, struct latency_buffer)
 #define ION _IO(LATENCY_IOC_MAGIC, ON)
 #define IOFF _IO(LATENCY_IOC_MAGIC, OFF)
