@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+//#include <sys/types.h>
+//#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "../driver/latency.h"
 
@@ -8,8 +11,8 @@ int main(int argc, char *argv[]) {
     int fd, res;
     // Open device
     printf("[+] Openning device\n");
-    fd = open(D_NAME);
-    if (fd == -1) {
+    fd = open("/dev/measure", O_RDWR);
+    if (fd < 0) {
         printf("[-] ERROR: The device cannot be openned\n");
         exit(1);
     }

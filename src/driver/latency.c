@@ -7,6 +7,12 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h>	
 #include <linux/device.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
+#include<linux/parport.h>
+#include <asm/uaccess.h>
+#include <linux/platform_device.h>
+
 
 #include "irq.h"
 #include "latency.h"
@@ -63,9 +69,10 @@ int latency_init(void) {
         printk(KERN_ALERT D_NAME " : device adding to the kerknel failed\n");
         return ret;
     }
-    else {
-        printk(KERN_INFO D_NAME " : device additin to the kernel succesful\n");
-    }
+    // Add /dev
+    device_create(latency_class, NULL, dev_num, NULL, D_NAME);
+
+    printk(KERN_INFO D_NAME " : device additin to the kernel succesful\n");
     return 0;
 }
 
@@ -77,9 +84,12 @@ void latency_exit(void) {
     // Free memory
     kfree(latency_devp);
 
+    // Remove /dev
+    device_destroy(latency_class, dev_num);
+
     // Remove /sys
-    class_destroy(latency_class);
-    
+    class_destroy(latency_class);    
+
     // Unregister device
     unregister_chrdev_region(dev_num,1);
     printk(KERN_INFO D_NAME " : unregistered the device numbers\n");
@@ -113,7 +123,7 @@ long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
     struct latency_dev *dev =fp->private_data;
     int ret = 0;
     struct latency_buffer *lb;
-
+    printk(KERN_ALERT D_NAME " : ioctl function called\n");
 	if (_IOC_TYPE(cmd) != LATENCY_IOC_MAGIC) {
         return -ENOTTY;
     }
@@ -155,12 +165,8 @@ ssize_t latency_read(struct file *fp, char __user *buf, size_t count, loff_t *fp
     struct latency_dev *dev =fp->private_data;
     ssize_t res;
     char status[128] = "Nicuesa\0";
-    if (down_interruptible(&dev->sem)) {
-        return -ERESTARTSYS;
-    }
     res = copy_to_user(buf, status, strlen(status));
     //res = dev->avg_nsecs;
-    up(&dev->sem);
     return res;
 }
 

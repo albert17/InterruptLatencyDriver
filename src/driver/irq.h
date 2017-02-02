@@ -16,9 +16,9 @@ struct latency_dev {
    struct timer_list timer;
    unsigned long avg_nsecs, last_nsecs;
    unsigned int period;
-   struct semaphore sem;
    enum io state;
    struct cdev cdev;
+   struct device dev;
 };
 
 int setup_pinmux(struct latency_dev *latency_devp);
