@@ -9,4 +9,4 @@ main: main.c
 		$(CC) $(CFLAGS) $(INC) $(LIBS) -o $(BIN) main.c 
 
 clean:
-		rm $(BIN)
+		rm -rf $(BIN)
