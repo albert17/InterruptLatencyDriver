@@ -6,7 +6,7 @@
 
 /* Defines */
 #define D_NAME "measure"
-#define LATENCY_IOC_MAGIC '$'
+#define LATENCY_IOC_MAGIC (0xDA)
 
 /* Structures */
 enum io {

@@ -6,7 +6,7 @@
 #include <fcntl.h>
 
 #include "../driver/latency.h"
-
+    
 int main(int argc, char *argv[]) {
     int fd, res;
     // Open device
@@ -16,17 +16,23 @@ int main(int argc, char *argv[]) {
         printf("[-] ERROR: The device cannot be openned\n");
         exit(1);
     }
-    // Configure device
+    printf("[+] Openned device: fd == %d\n", fd);
+
     struct latency_buffer *lb;
-    lb->irq_pin = 48;
-    lb->gpio_pin = 60;
+    lb = (struct latency_buffer*) malloc(sizeof(struct latency_buffer));
+   // Configure device
+    lb->irq_pin = 915;
+    lb->gpio_pin = 912;
     lb->period = 10;
+
     printf("[+] Configuring device\n");
     res = ioctl(fd,ISET,lb);
     if (res == -1) {
         printf("[-] ERROR: The device cannot be configured\n");
         exit(1);
     }
+    printf("[+] Configured device\n");
+    
     // Starting device
     printf("[+] Starting device\n");
     res = ioctl(fd,ION);
@@ -34,6 +40,7 @@ int main(int argc, char *argv[]) {
         printf("[-] ERROR: The device cannot be started\n");
         exit(1);
     }
+    printf("[+] Started device\n");
     
     // Wait 1 seconds
     sleep(1);
@@ -45,7 +52,8 @@ int main(int argc, char *argv[]) {
         printf("[-] ERROR: The device cannot be stopped\n");
         exit(1);
     }
-
+    printf("[+] Stopped device\n");
+    
     // Get time
     char result[128];
     res = read(fd, &result);
@@ -55,6 +63,9 @@ int main(int argc, char *argv[]) {
     else {
         printf("Result: %s", result);
     }
+
     // Close device
+    printf("[+] Closing device\n");
     close(fd);
+    printf("[+] Closed device\n");
 }

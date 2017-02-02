@@ -1,6 +1,7 @@
 /* Includes */
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/time.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/semaphore.h>
@@ -24,9 +25,11 @@ int latency_open(struct inode *inode, struct file *fp);
 int latency_close(struct inode *inode, struct file *fp);
 long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg);
 ssize_t latency_read(struct file *fp, char __user *buf, size_t count, loff_t *fpos);
+
 /* Variables */
 static struct latency_dev *latency_devp;
-static struct class*  latency_class  = NULL;
+static struct class *latency_class  = NULL;
+struct latency_buffer *lb;
 static dev_t dev_num;
 static atomic_t available = ATOMIC_INIT(1);
 
@@ -57,7 +60,10 @@ int latency_init(void) {
     latency_class = class_create(THIS_MODULE, "latency"); 
     // Allocate latency_dev
     latency_devp = kmalloc(sizeof(struct latency_dev), GFP_KERNEL);
-    
+
+    // Allocate latency_buffer
+    lb = kmalloc(sizeof(struct latency_buffer), GFP_KERNEL);
+
     // Create, allocate and initialize cdev structure
     cdev_init(&latency_devp->cdev, &fops);
     latency_devp->cdev.ops = &fops;
@@ -113,34 +119,45 @@ int latency_open(struct inode *inode, struct file *fp) {
 
 int latency_close(struct inode *inode, struct file *fp) {
     struct latency_dev *dev =fp->private_data;
-    release_gpio_irq(dev);
+    printk(KERN_ALERT D_NAME " : device closing\n");
+    if(dev->state != OFF) {
+        release_gpio_irq(dev);
+    }
+    printk(KERN_ALERT D_NAME " : device released gpio irq\n");
     dev->state = OFF;
     atomic_inc(&available); /* release the device */
+    printk(KERN_ALERT D_NAME " : device closed\n");
     return 0;
 }
 
 long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
     struct latency_dev *dev =fp->private_data;
     int ret = 0;
-    struct latency_buffer *lb;
     printk(KERN_ALERT D_NAME " : ioctl function called\n");
 	if (_IOC_TYPE(cmd) != LATENCY_IOC_MAGIC) {
+        printk(KERN_ALERT D_NAME " : ioctl incorrect magic number\n");
         return -ENOTTY;
     }
 
     switch(cmd) {
-        case SET:
+        case ISET:
+            printk(KERN_ALERT D_NAME " : ioctl set called\n");
             if (dev->state == OFF) {
-                ret = copy_from_user((char *)lb, (char *)arg, sizeof(*lb));
-                if (ret) { return -EFAULT;}
+                printk(KERN_ALERT D_NAME " : ioctl copying from user\n");
+                if(copy_from_user(lb, (struct latency_buffer *)arg, sizeof(struct latency_buffer))) { 
+                    printk(KERN_ALERT D_NAME " : ioctl fail copy from user\n");
+                    return -EFAULT;
+                }
                 dev->irq_pin = lb->irq_pin;
                 dev->gpio_pin = lb->gpio_pin;
                 dev->period = (HZ/lb->period);
                 dev->state = SET;
             }
             break;
-        case ON:
+        case ION:
+            printk(KERN_ALERT D_NAME " : ioctl on called\n");
             if (dev->state == SET) {
+                printk(KERN_ALERT D_NAME " : ioctl configuring gpio\n");
                 ret = configure_gpio_irq(dev);
                 if (ret == -1) {
                     printk(KERN_ALERT D_NAME " : failed to configure pins.\n");
@@ -149,13 +166,15 @@ long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
                 dev->state = ON;
             }
             break;
-        case OFF:
+        case IOFF:
+            printk(KERN_ALERT D_NAME " : ioctl off called\n");
             if (dev->state == ON) {
                 release_gpio_irq(dev);
                 dev->state = OFF;
             }
             break;
         default:
+            printk(KERN_ALERT D_NAME " : ioctl default called\n");
             return -ENOTTY;
     }
     return ret;
@@ -164,7 +183,9 @@ long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
 ssize_t latency_read(struct file *fp, char __user *buf, size_t count, loff_t *fpos) {
     struct latency_dev *dev =fp->private_data;
     ssize_t res;
-    char status[128] = "Nicuesa\0";
+    char status[128];
+    sprintf(status,"%d",(int)dev->last_nsecs);
+    printk(KERN_ALERT D_NAME " : read function called\n");
     res = copy_to_user(buf, status, strlen(status));
     //res = dev->avg_nsecs;
     return res;
