@@ -3,10 +3,10 @@
  * Date: 2017/01/30
  * Description: User program which uses the "measure" driver. 
  */
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdint.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
 
 #include "../driver/latency.h"
     
