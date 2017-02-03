@@ -4,23 +4,26 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-/* Defines */
+// Device name
 #define D_NAME "measure"
+// IOCTL magic number
 #define LATENCY_IOC_MAGIC (0xDA)
 
-/* Structures */
+// List of available conmmands
 enum io {
     SET,
     ON,
     OFF,
 };
 
+// pins and period information
 struct latency_buffer{
      uint16_t irq_pin;
      uint16_t gpio_pin;
      int period;
 };
 
+// Times information
 struct latency_result{
      unsigned long min;
      unsigned long max;
@@ -29,7 +32,7 @@ struct latency_result{
 };
 
 
-
+//IOCTL commands
 #define ISET _IOW(LATENCY_IOC_MAGIC, SET, struct latency_buffer)
 #define ION _IO(LATENCY_IOC_MAGIC, ON)
 #define IOFF _IO(LATENCY_IOC_MAGIC, OFF)
