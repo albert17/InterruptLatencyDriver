@@ -127,7 +127,6 @@ int configure_gpio_irq(struct latency_dev *ldev) {
       ret = 0;
    }
    // Set irq context
-   printk(KERN_ALERT D_NAME " : request_any_context_irq\n");
    ret = request_any_context_irq(
       ldev->irq,
       irq_handler,
@@ -139,8 +138,8 @@ int configure_gpio_irq(struct latency_dev *ldev) {
       printk(KERN_ALERT D_NAME " : failed to enable IRQ %d for pin %d.\n",
          ldev->irq, ldev->lb.irq_pin);
       goto err_free_irq_return;
-   } else{
-      printk(KERN_ALERT D_NAME " : IRQ enabled\n",
+   } 
+   else {
       ldev->irq_enabled = 1;
    }
    
