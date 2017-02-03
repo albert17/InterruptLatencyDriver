@@ -56,8 +56,12 @@ int latency_init(void) {
     printk(KERN_INFO D_NAME " : major number of device is %d\n", ret);
 
     // Create class (populates /sys)
-    latency_class = class_create(THIS_MODULE, "latency"); 
-    
+    latency_class = class_create(THIS_MODULE, D_NAME); 
+    if (latency_class < 0){
+		unregister_chrdev_region(dev_num,1);
+		printk(KERN_ALERT D_NAME ": unable to create class for device\n");
+		return -1;
+	}
     // Allocate latency_dev
     latency_devp = kmalloc(sizeof(struct latency_dev), GFP_KERNEL);
     
@@ -73,8 +77,12 @@ int latency_init(void) {
         return ret;
     }
     // Populates /dev
-    device_create(latency_class, NULL, dev_num, NULL, D_NAME);
-
+    if(device_create(latency_class, NULL, dev_num, NULL, D_NAME) < 0) {
+		class_destroy(latency_class);
+		unregister_chrdev_region(dev_num,1);
+		printk(KERN_ALERT D_NAME ": unable to create device from class\n");
+		return -1;
+	}
     printk(KERN_INFO D_NAME " : device loaded succesful\n");
     return 0;
 }
