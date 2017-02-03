@@ -1,3 +1,10 @@
+/**
+ * Author: A. Alvarez
+ * Date: 2017/01/30
+ * Description: Defines pins configuration, and irq and timer handlers.
+ * interrupt latency. 
+ */
+
 #ifndef IRQ_H
 #define IRQ_H
 
