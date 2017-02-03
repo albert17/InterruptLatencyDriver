@@ -187,7 +187,7 @@ irqreturn_t irq_handler(int irq, void* dev_id) {
 void timer_handler(unsigned long ptr) {
    struct latency_dev* ldev = (struct latency_dev*)ptr;
    struct timespec delta;
-   long error;
+   long long error;
    if (ldev->irq_fired) {
        delta = timespec_sub(ldev->irq_time, ldev->gpio_time); 
        
