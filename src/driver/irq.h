@@ -21,9 +21,11 @@
 
 // latency_dev structure
 struct latency_dev {
+   wait_queue_head_t readers_queue;
    struct timespec gpio_time, irq_time;
    u16 irq;
    u8 irq_fired, irq_enabled;
+   unsigned int counter;
    struct timer_list timer;
    enum io state;
    struct latency_buffer lb;

@@ -29,6 +29,7 @@ int main(int argc, char *argv[]) {
     lb->irq_pin = 915;
     lb->gpio_pin = 912;
     lb->period = 10;
+    lb->test = 100;
 
     printf("[+] Configuring device\n");
     res = ioctl(fd,ISET,lb);
@@ -50,27 +51,15 @@ int main(int argc, char *argv[]) {
     }
     printf("[+] Started device\n");
     
-    // Wait 10 seconds
-    sleep(10);
-
-    // Stoping device
-    printf("[+] Stopping device\n");
-    res = ioctl(fd,IOFF);
-    if (res == -1) {
-        printf("[-] ERROR: The device cannot be stopped\n");
-        free(lb);free(result);
-        exit(1);
-   
-    }
-    printf("[+] Stopped device\n");
-    
-    // Get time
+    // Get time - Block Read
     res = read(fd, result);
     if (res == -1) {
+        sleep(1);
         printf("[-] ERROR: Time cannot be obtained\n");
         free(lb);free(result);
         exit(1);
     }
+
     printf("Result - Time MIN: %lu ns\n", result->min);
     printf("Result - Time MAX: %lu ns\n", result->max);
     printf("Result - Time AVG: %lu ns\n", result->avg);

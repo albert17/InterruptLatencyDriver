@@ -4,18 +4,28 @@
  * Description: Implements driver functions
  */
 
+#include <asm/io.h>
 #include <asm/uaccess.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
+#include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/gpio.h>
+#include <linux/init.h>
+#include <linux/ioctl.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
+#include <linux/parport.h>
 #include <linux/platform_device.h>
+#include <linux/sched.h>
 #include <linux/semaphore.h>
 #include <linux/slab.h>	
 #include <linux/time.h>
+#include <linux/types.h>
 #include <linux/uaccess.h>
-#include <linux/parport.h>
+#include <linux/version.h>
+#include <linux/wait.h>
 
 #include "irq.h"
 #include "latency.h"
@@ -83,6 +93,8 @@ int latency_init(void) {
 		printk(KERN_ALERT D_NAME ": unable to create device from class\n");
 		return -1;
 	}
+    // Init wait queue
+    init_waitqueue_head(&latency_devp->readers_queue);
     printk(KERN_INFO D_NAME " : device loaded succesful\n");
     return 0;
 }
@@ -125,9 +137,9 @@ int latency_open(struct inode *inode, struct file *fp) {
 int latency_close(struct inode *inode, struct file *fp) {
     struct latency_dev *dev =fp->private_data;
     // Release gpio and irq
-    if(dev->state != OFF) {
-        release_gpio_irq(dev);
-    }
+    if (dev->irq_enabled) {
+        disable_irq(dev->irq);
+    } 
     dev->state = OFF;
     // Free atomic
     atomic_inc(&available); /* release the device */
@@ -163,6 +175,7 @@ long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
                 // Set data
                 dev->res.avg = 0; dev->res.var = 0;
                 dev->res.max = 0; dev->res.min = -1;
+                dev->counter = 0;
                 // Configure gpio and irq
                 ret = configure_gpio_irq(dev);
                 if (ret == -1) {
@@ -170,13 +183,6 @@ long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
                     return ret;
                 }
                 dev->state = ON;
-            }
-            break;
-        case IOFF:
-            // Ends measure
-            if (dev->state == ON) {
-                release_gpio_irq(dev);
-                dev->state = OFF;
             }
             break;
         default:
@@ -188,6 +194,10 @@ long latency_ioctl(struct file *fp, unsigned int cmd, unsigned long arg) {
 
 ssize_t latency_read(struct file *fp, char __user *buf, size_t count, loff_t *fpos) {
     struct latency_dev *dev =fp->private_data;
+    wait_event_interruptible(dev->readers_queue, dev->state!=ON);
+    if (dev->irq_enabled) {
+        disable_irq(dev->irq);
+    }    
     if(copy_to_user((struct latency_result*)buf, &dev->res, sizeof(struct latency_result))) {
         printk(KERN_ALERT D_NAME " : read fail copy to user\n");
         return -EFAULT;

@@ -95,7 +95,7 @@ int setup_pinmux(struct latency_dev *ldev) {
 
 int configure_gpio_irq(struct latency_dev *ldev) {
    int ret = 0;
-   // Write pins
+    // Write pins
    ret = setup_pinmux(ldev);
    if (ret < 0) {
       printk(KERN_ALERT D_NAME " : failed to apply pinmux settings.\n");
@@ -188,35 +188,42 @@ void timer_handler(unsigned long ptr) {
    struct latency_dev* ldev = (struct latency_dev*)ptr;
    struct timespec delta;
    long long error;
-   if (ldev->irq_fired) {
-       delta = timespec_sub(ldev->irq_time, ldev->gpio_time); 
-       
-       // Calculate avg
-       ldev->res.avg = ldev->res.avg ?
-            (unsigned long)(((unsigned long long)delta.tv_nsec +
-                (unsigned long long)ldev->res.avg) >> 1) :
-                delta.tv_nsec;
-
-        // Calculate error
-        error = (ldev->res.avg - delta.tv_nsec);
-        ldev->res.var =
-            (unsigned long)(((unsigned long long)ldev->res.var +
-                (unsigned long long)error*error) >> 1);
+   if(ldev->counter == ldev->lb.test){
+        ldev->state = OFF;
+        wake_up_interruptible(&ldev->readers_queue);
+   }
+   else{
+    if (ldev->irq_fired) {
+        ldev->counter++;
+        delta = timespec_sub(ldev->irq_time, ldev->gpio_time); 
         
-        // Set min
-        if((unsigned long) delta.tv_nsec < ldev->res.min) {
-            ldev->res.min = delta.tv_nsec;
+        // Calculate avg
+        ldev->res.avg = ldev->res.avg ?
+                (unsigned long)(((unsigned long long)delta.tv_nsec +
+                    (unsigned long long)ldev->res.avg) >> 1) :
+                    delta.tv_nsec;
+
+            // Calculate error
+            error = (ldev->res.avg - delta.tv_nsec);
+            ldev->res.var =
+                (unsigned long)(((unsigned long long)ldev->res.var +
+                    (unsigned long long)error*error) >> 1);
+            
+            // Set min
+            if((unsigned long) delta.tv_nsec < ldev->res.min) {
+                ldev->res.min = delta.tv_nsec;
+            }
+
+            // Set max
+            if((unsigned long) delta.tv_nsec > ldev->res.max) {
+                ldev->res.max = delta.tv_nsec;   
+            }
         }
 
-        // Set max
-        if((unsigned long) delta.tv_nsec > ldev->res.max) {
-            ldev->res.max = delta.tv_nsec;   
-        }
+        // Reconfigure timer
+        ldev->irq_fired = 0; 
+        mod_timer(&ldev->timer, jiffies + ldev->lb.period);
+        getnstimeofday(&ldev->gpio_time);
+        gpio_set_value(ldev->lb.gpio_pin, 0);
     }
-
-    // Reconfigure timer
-    ldev->irq_fired = 0; 
-    mod_timer(&ldev->timer, jiffies + ldev->lb.period);
-    getnstimeofday(&ldev->gpio_time);
-    gpio_set_value(ldev->lb.gpio_pin, 0);
 }

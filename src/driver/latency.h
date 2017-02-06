@@ -21,6 +21,7 @@ struct latency_buffer{
      uint16_t irq_pin;
      uint16_t gpio_pin;
      int period;
+     unsigned int test;
 };
 
 // Times information
@@ -35,6 +36,5 @@ struct latency_result{
 //IOCTL commands
 #define ISET _IOW(LATENCY_IOC_MAGIC, SET, struct latency_buffer)
 #define ION _IO(LATENCY_IOC_MAGIC, ON)
-#define IOFF _IO(LATENCY_IOC_MAGIC, OFF)
 
 #endif
